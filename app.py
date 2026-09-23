@@ -19,7 +19,33 @@ except Exception:
     PDF_FONT = 'Helvetica'
 
 # Set page configuration
-st.set_page_config(page_title="Electricity & Solar Predictor Pro", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="VoltIQ - Smart AI Energy & Solar Audit", page_icon="⚡", layout="wide")
+
+# Custom CSS styling for premium look & intuitive UI
+st.markdown("""
+    <style>
+    /* Metric Card Styling */
+    [data-testid="stMetricValue"] {
+        font-weight: 800 !important;
+        font-size: 1.6rem !important;
+    }
+    .main-guide-card {
+        background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(59, 130, 246, 0.1));
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 20px;
+    }
+    .step-badge {
+        background-color: #F59E0B;
+        color: #000000;
+        font-weight: bold;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 0.85rem;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # Function to make prediction using the saved model and scaler
 def predict_electricity_consumption(input_features):
@@ -265,12 +291,27 @@ def generate_pdf_report(data, lang='English'):
     buffer.seek(0)
     return buffer.getvalue()
 
-# Streamlit App UI Header
-st.title('⚡ Electricity Consumption, Bill & Solar Predictor Pro')
+# Streamlit App Header
+st.title('⚡ VoltIQ - Smart AI Electricity & Solar Audit Platform')
 st.markdown('Predict daily electricity usage (kWh), estimate monthly bill (₹), evaluate carbon footprint, and analyze Solar ROI & Payback period!')
 
+# User Guidance Card right at the top
+st.markdown("""
+<div class="main-guide-card">
+    <div style="font-weight: 700; font-size: 1.05rem; color: #F59E0B; margin-bottom: 8px;">
+        💡 How to Use VoltIQ Platform / हे ॲप कसे वापरावे?
+    </div>
+    <div style="font-size: 0.9rem; line-height: 1.6;">
+        <span class="step-badge">Step 1</span> <b>Adjust Inputs / इनपुट बदला</b>: Change Temperature, Building Area, Occupants & AC Usage on the left sidebar (<i>On Mobile: Click <b>top-left ☰ button</b></i>).<br>
+        <span class="step-badge">Step 2</span> <b>Auto-Calculated Results / त्वरित निकाल</b>: View your live Electricity Consumption (kWh), Monthly Bill (₹), Solar Size (kW), & Carbon Footprint below.<br>
+        <span class="step-badge">Step 3</span> <b>Download PDF Statement / अहवाल डाऊनलोड करा</b>: Select English, मराठी, or हिंदी at the bottom to download your official PDF report!
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
 # Sidebar for User Input
-st.sidebar.header('⚙️ Input Features')
+st.sidebar.header('⚙️ Input Features (घराची माहिती)')
+st.sidebar.write('Change parameters below to recalculate live bill & solar size:')
 
 temp = st.sidebar.number_input('Temperature (°C)', min_value=0.0, max_value=60.0, value=25.0, step=0.5)
 humidity = st.sidebar.number_input('Humidity (%)', min_value=0.0, max_value=100.0, value=50.0, step=1.0)
@@ -286,151 +327,146 @@ unit_rate = st.sidebar.number_input('Electricity Rate (₹ / kWh)', min_value=1.
 
 input_features = [temp, humidity, area, occupants, appliances, is_weekend, ac_hours]
 
-# Initialize Session State for persistent prediction across widget interactions
-if 'has_predicted' not in st.session_state:
-    st.session_state['has_predicted'] = False
+# Predict button triggers explicit recalculation
+btn_click = st.sidebar.button('🚀 Recalculate Now', type='primary', use_container_width=True)
 
-# Trigger prediction when button is clicked
-if st.button('🚀 Predict & Calculate Full Impact', type='primary'):
-    st.session_state['has_predicted'] = True
+# Always render live calculations (Default Auto-Run on page load)
+daily_kwh = predict_electricity_consumption(input_features)
+monthly_kwh = daily_kwh * 30.0
+monthly_bill = monthly_kwh * unit_rate
+yearly_bill = monthly_bill * 12.0
 
-if st.session_state['has_predicted']:
-    daily_kwh = predict_electricity_consumption(input_features)
-    monthly_kwh = daily_kwh * 30.0
-    monthly_bill = monthly_kwh * unit_rate
-    yearly_bill = monthly_bill * 12.0
-    
-    # Solar capacity calculation: 1 kW solar generates ~4 kWh per day
-    recommended_solar_kw = max(1.0, round(daily_kwh / 4.0, 1))
-    
-    # 1. Carbon Footprint Calculations (0.82 kg CO2 per kWh)
-    monthly_co2 = monthly_kwh * 0.82
-    annual_co2 = monthly_co2 * 12.0
-    trees_saved = int(annual_co2 / 20.0)
-    
-    # 2. Solar ROI & Payback Calculations
-    gross_solar_cost = recommended_solar_kw * 50000.0
-    subsidy = min(78000.0, 30000.0 * min(2, recommended_solar_kw) + (18000.0 if recommended_solar_kw >= 3 else 0.0))
-    net_solar_cost = max(10000.0, gross_solar_cost - subsidy)
-    payback_years = round(net_solar_cost / yearly_bill, 1) if yearly_bill > 0 else 0.0
-    solar_roi = round((yearly_bill / net_solar_cost) * 100.0, 1) if net_solar_cost > 0 else 0.0
-    
-    # 3. Seasonal Comparison Predictions
-    summer_kwh = predict_electricity_consumption([min(50.0, temp + 6.0), humidity, area, occupants, appliances, is_weekend, min(24.0, ac_hours + 3.0)])
-    summer_bill = summer_kwh * 30.0 * unit_rate
-    
-    winter_kwh = predict_electricity_consumption([max(15.0, temp - 5.0), humidity, area, occupants, appliances, is_weekend, 0.0])
-    winter_bill = winter_kwh * 30.0 * unit_rate
-    
-    st.markdown("---")
-    st.subheader("📊 1. Primary Prediction & Energy Insights")
-    
-    # Display 4 Main Metric Cards
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.metric(label="Daily Consumption", value=f"{daily_kwh:.2f} kWh")
-    with c2:
-        st.metric(label="Monthly Units", value=f"{monthly_kwh:.1f} Units")
-    with c3:
-        st.metric(label="Estimated Monthly Bill", value=f"₹ {monthly_bill:,.2f}")
-    with c4:
-        st.metric(label="Recommended Solar Size", value=f"{recommended_solar_kw} kW")
-        
-    st.markdown("---")
-    
-    # Detailed Impact Cards Row (Bill & Solar & Carbon)
-    r1_col1, r1_col2 = st.columns(2)
-    
-    with r1_col1:
-        st.info("### 💵 Monthly Bill & Tariff Breakdown\n"
-                f"- **Daily Energy Used**: `{daily_kwh:.2f} kWh`\n"
-                f"- **Monthly Energy Consumed**: `{monthly_kwh:.2f} kWh`\n"
-                f"- **Tariff Rate**: `₹ {unit_rate:.2f} / kWh`\n"
-                f"- **Estimated Monthly Bill**: **`₹ {monthly_bill:,.2f}`**\n"
-                f"- **Estimated Yearly Bill**: **`₹ {yearly_bill:,.2f}`**\n")
+# Solar capacity calculation: 1 kW solar generates ~4 kWh per day
+recommended_solar_kw = max(1.0, round(daily_kwh / 4.0, 1))
 
-    with r1_col2:
-        st.success("### ☀️ Solar ROI & Investment Roadmap\n"
-                   f"- **Recommended Capacity**: **`{recommended_solar_kw} kW`**\n"
-                   f"- **Gross Solar Cost**: `₹ {gross_solar_cost:,.2f}`\n"
-                   f"- **Est. Govt Subsidy (PM Surya Ghar)**: `- ₹ {subsidy:,.2f}`\n"
-                   f"- **Net Investment (After Subsidy)**: **`₹ {net_solar_cost:,.2f}`**\n"
-                   f"- **Payback Period**: **`~ {payback_years} Years ⏳`** *(Annual ROI: {solar_roi}%/yr)*\n")
+# 1. Carbon Footprint Calculations (0.82 kg CO2 per kWh)
+monthly_co2 = monthly_kwh * 0.82
+annual_co2 = monthly_co2 * 12.0
+trees_saved = int(annual_co2 / 20.0)
 
-    st.markdown("---")
-    
-    # Feature 1 & Feature 3 Row: Carbon Footprint & Seasonal Chart
-    r2_col1, r2_col2 = st.columns(2)
-    
-    with r2_col1:
-        st.subheader("🍃 Carbon Footprint & Environmental Impact")
-        st.warning(
-            f"- 🏭 **Monthly CO₂ Grid Emissions**: `{monthly_co2:.1f} kg CO₂`\n"
-            f"- 💨 **Annual CO₂ Grid Emissions**: `{annual_co2:.1f} kg CO₂`\n"
-            f"- 🌳 **Trees Saved Equivalent with Solar**: **`{trees_saved} Trees Saved / Year`**\n\n"
-            f"💡 *Installing a `{recommended_solar_kw} kW` Solar System reduces your carbon footprint to 0 and saves {trees_saved} trees every year!*"
-        )
-        
-    with r2_col2:
-        st.subheader("☀️ ⛅ ❄️ Seasonal Bill Comparison")
-        seasonal_df = pd.DataFrame({
-            'Season': ['Summer (उन्हाळा)', 'Monsoon (पावसाळा/Current)', 'Winter (हिवाळा)'],
-            'Monthly Bill (₹)': [round(summer_bill, 2), round(monthly_bill, 2), round(winter_bill, 2)]
-        })
-        fig = px.bar(
-            seasonal_df, x='Season', y='Monthly Bill (₹)', text='Monthly Bill (₹)',
-            color='Season', color_discrete_sequence=['#EF4444', '#3B82F6', '#10B981'],
-            title="Estimated Bill Variation Across Seasons"
-        )
-        fig.update_traces(texttemplate='₹ %{text:,.2f}', textposition='outside')
-        fig.update_layout(showlegend=False, height=300)
-        st.plotly_chart(fig, use_container_width=True)
+# 2. Solar ROI & Payback Calculations
+gross_solar_cost = recommended_solar_kw * 50000.0
+subsidy = min(78000.0, 30000.0 * min(2, recommended_solar_kw) + (18000.0 if recommended_solar_kw >= 3 else 0.0))
+net_solar_cost = max(10000.0, gross_solar_cost - subsidy)
+payback_years = round(net_solar_cost / yearly_bill, 1) if yearly_bill > 0 else 0.0
+solar_roi = round((yearly_bill / net_solar_cost) * 100.0, 1) if net_solar_cost > 0 else 0.0
 
-    st.markdown("---")
-    
-    # Feature 4: Downloadable Multilingual PDF Electricity Bill Report
-    st.subheader("📄 Download Official Electricity & Solar Audit Statement (PDF)")
-    
-    col_pdf1, col_pdf2 = st.columns([1, 2])
-    with col_pdf1:
-        selected_pdf_lang = st.selectbox(
-            "🌐 Select PDF Language / भाषा निवडा",
-            ['English', 'मराठी (Marathi)', 'हिंदी (Hindi)'],
-            index=0,
-            key='pdf_lang_select'
-        )
-    
-    report_data = {
-        'area': area,
-        'occupants': occupants,
-        'temp': temp,
-        'ac_hours': ac_hours,
-        'rate': unit_rate,
-        'is_weekend': is_weekend,
-        'daily_kwh': daily_kwh,
-        'monthly_kwh': monthly_kwh,
-        'monthly_bill': monthly_bill,
-        'yearly_bill': yearly_bill,
-        'monthly_co2': monthly_co2,
-        'annual_co2': annual_co2,
-        'trees_saved': trees_saved,
-        'solar_kw': recommended_solar_kw,
-        'gross_solar_cost': gross_solar_cost,
-        'subsidy': subsidy,
-        'net_solar_cost': net_solar_cost,
-        'payback_years': payback_years,
-        'solar_roi': solar_roi
-    }
-    
-    pdf_bytes = generate_pdf_report(report_data, lang=selected_pdf_lang)
-    btn_label = PDF_TRANSLATIONS.get(selected_pdf_lang, {}).get('btn_label', '📥 Download PDF Statement')
-    
-    with col_pdf2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        st.download_button(
-            label=btn_label,
-            data=pdf_bytes,
-            file_name=f"Electricity_Bill_and_Solar_Audit_Report_{selected_pdf_lang.split()[0]}.pdf",
-            mime="application/pdf",
-            type="primary"
-        )
+# 3. Seasonal Comparison Predictions
+summer_kwh = predict_electricity_consumption([min(50.0, temp + 6.0), humidity, area, occupants, appliances, is_weekend, min(24.0, ac_hours + 3.0)])
+summer_bill = summer_kwh * 30.0 * unit_rate
+
+winter_kwh = predict_electricity_consumption([max(15.0, temp - 5.0), humidity, area, occupants, appliances, is_weekend, 0.0])
+winter_bill = winter_kwh * 30.0 * unit_rate
+
+st.markdown("---")
+st.subheader("📊 1. Primary Energy Prediction & Insights")
+
+# Display 4 Main Metric Cards
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+    st.metric(label="Daily Consumption", value=f"{daily_kwh:.2f} kWh")
+with c2:
+    st.metric(label="Monthly Units", value=f"{monthly_kwh:.1f} Units")
+with c3:
+    st.metric(label="Estimated Monthly Bill", value=f"₹ {monthly_bill:,.2f}")
+with c4:
+    st.metric(label="Recommended Solar Size", value=f"{recommended_solar_kw} kW")
+
+st.markdown("---")
+
+# Detailed Impact Cards Row (Bill & Solar & Carbon)
+r1_col1, r1_col2 = st.columns(2)
+
+with r1_col1:
+    st.info("### 💵 Monthly Bill & Tariff Breakdown\n"
+            f"- **Daily Energy Used**: `{daily_kwh:.2f} kWh`\n"
+            f"- **Monthly Energy Consumed**: `{monthly_kwh:.2f} kWh`\n"
+            f"- **Tariff Rate**: `₹ {unit_rate:.2f} / kWh`\n"
+            f"- **Estimated Monthly Bill**: **`₹ {monthly_bill:,.2f}`**\n"
+            f"- **Estimated Yearly Bill**: **`₹ {yearly_bill:,.2f}`**\n")
+
+with r1_col2:
+    st.success("### ☀️ Solar ROI & Investment Roadmap\n"
+               f"- **Recommended Capacity**: **`{recommended_solar_kw} kW`**\n"
+               f"- **Gross Solar Cost**: `₹ {gross_solar_cost:,.2f}`\n"
+               f"- **Est. Govt Subsidy (PM Surya Ghar)**: `- ₹ {subsidy:,.2f}`\n"
+               f"- **Net Investment (After Subsidy)**: **`₹ {net_solar_cost:,.2f}`**\n"
+               f"- **Payback Period**: **`~ {payback_years} Years ⏳`** *(Annual ROI: {solar_roi}%/yr)*\n")
+
+st.markdown("---")
+
+# Feature 1 & Feature 3 Row: Carbon Footprint & Seasonal Chart
+r2_col1, r2_col2 = st.columns(2)
+
+with r2_col1:
+    st.subheader("🍃 Carbon Footprint & Environmental Impact")
+    st.warning(
+        f"- 🏭 **Monthly CO₂ Grid Emissions**: `{monthly_co2:.1f} kg CO₂`\n"
+        f"- 💨 **Annual CO₂ Grid Emissions**: `{annual_co2:.1f} kg CO₂`\n"
+        f"- 🌳 **Trees Saved Equivalent with Solar**: **`{trees_saved} Trees Saved / Year`**\n\n"
+        f"💡 *Installing a `{recommended_solar_kw} kW` Solar System reduces your carbon footprint to 0 and saves {trees_saved} trees every year!*"
+    )
+
+with r2_col2:
+    st.subheader("☀️ ⛅ ❄️ Seasonal Bill Comparison")
+    seasonal_df = pd.DataFrame({
+        'Season': ['Summer (उन्हाळा)', 'Monsoon (पावसाळा/Current)', 'Winter (हिवाळा)'],
+        'Monthly Bill (₹)': [round(summer_bill, 2), round(monthly_bill, 2), round(winter_bill, 2)]
+    })
+    fig = px.bar(
+        seasonal_df, x='Season', y='Monthly Bill (₹)', text='Monthly Bill (₹)',
+        color='Season', color_discrete_sequence=['#EF4444', '#3B82F6', '#10B981'],
+        title="Estimated Bill Variation Across Seasons"
+    )
+    fig.update_traces(texttemplate='₹ %{text:,.2f}', textposition='outside')
+    fig.update_layout(showlegend=False, height=300)
+    st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+# Feature 4: Downloadable Multilingual PDF Electricity Bill Report
+st.subheader("📄 Download Official Electricity & Solar Audit Statement (PDF)")
+
+col_pdf1, col_pdf2 = st.columns([1, 2])
+with col_pdf1:
+    selected_pdf_lang = st.selectbox(
+        "🌐 Select PDF Language / भाषा निवडा",
+        ['English', 'मराठी (Marathi)', 'हिंदी (Hindi)'],
+        index=0,
+        key='pdf_lang_select'
+    )
+
+report_data = {
+    'area': area,
+    'occupants': occupants,
+    'temp': temp,
+    'ac_hours': ac_hours,
+    'rate': unit_rate,
+    'is_weekend': is_weekend,
+    'daily_kwh': daily_kwh,
+    'monthly_kwh': monthly_kwh,
+    'monthly_bill': monthly_bill,
+    'yearly_bill': yearly_bill,
+    'monthly_co2': monthly_co2,
+    'annual_co2': annual_co2,
+    'trees_saved': trees_saved,
+    'solar_kw': recommended_solar_kw,
+    'gross_solar_cost': gross_solar_cost,
+    'subsidy': subsidy,
+    'net_solar_cost': net_solar_cost,
+    'payback_years': payback_years,
+    'solar_roi': solar_roi
+}
+
+pdf_bytes = generate_pdf_report(report_data, lang=selected_pdf_lang)
+btn_label = PDF_TRANSLATIONS.get(selected_pdf_lang, {}).get('btn_label', '📥 Download PDF Statement')
+
+with col_pdf2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.download_button(
+        label=btn_label,
+        data=pdf_bytes,
+        file_name=f"Electricity_Bill_and_Solar_Audit_Report_{selected_pdf_lang.split()[0]}.pdf",
+        mime="application/pdf",
+        type="primary"
+    )
